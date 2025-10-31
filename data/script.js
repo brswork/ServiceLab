@@ -442,16 +442,41 @@ function initSectionAnimations() {
 // Contact form handler
 function initContactForm() {
   const form = document.getElementById('contact-form');
+  const messageEl = document.getElementById('form-message');
+  
+  // Функция для показа сообщения
+  function showMessage(text, type = 'success') {
+    messageEl.textContent = text;
+    messageEl.className = `form-message form-message-${type}`;
+    messageEl.style.display = 'block';
+    
+    // Анимация появления
+    gsap.fromTo(messageEl, 
+      { opacity: 0, y: -10 },
+      { opacity: 1, y: 0, duration: 0.3, ease: 'power2.out' }
+    );
+    
+    // Автоматически скрыть через 5 секунд для успешных сообщений
+    if (type === 'success') {
+      setTimeout(() => {
+        gsap.to(messageEl, {
+          opacity: 0,
+          y: -10,
+          duration: 0.3,
+          ease: 'power2.in',
+          onComplete: () => {
+            messageEl.style.display = 'none';
+          }
+        });
+      }, 5000);
+    }
+  }
   
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     
-    const formData = {
-      name: form.name.value,
-      email: form.email.value,
-      phone: form.phone.value,
-      message: form.message.value,
-    };
+    // Скрыть предыдущие сообщения
+    messageEl.style.display = 'none';
     
     const submitBtn = form.querySelector('.form-submit');
     const originalText = submitBtn.innerHTML;
@@ -459,29 +484,36 @@ function initContactForm() {
     submitBtn.disabled = true;
     
     try {
-      // Try to send via API
-      const response = await fetch('/api/contact', {
+      // Создаем FormData для отправки на PHP
+      const formData = new FormData(form);
+      
+      // Отправляем на PHP обработчик
+      const response = await fetch('src/send_email.php', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formData),
+        body: formData,
       });
       
-      if (!response.ok) {
-        throw new Error('API not available');
-      }
+      const result = await response.json();
       
-      alert('Сообщение отправлено! Мы свяжемся с вами в ближайшее время.');
-      form.reset();
+      if (result.success) {
+        showMessage(result.message || 'Сообщение успешно отправлено! Мы свяжемся с вами в ближайшее время.', 'success');
+        form.reset();
+      } else {
+        throw new Error(result.message || 'Ошибка при отправке сообщения');
+      }
     } catch (error) {
-      // Fallback to mailto
-      const subject = encodeURIComponent('Новое сообщение с сайта ServiceLab');
-      const body = encodeURIComponent(
-        `Имя: ${formData.name}\nEmail: ${formData.email}\nТелефон: ${formData.phone}\n\nСообщение:\n${formData.message}`
-      );
-      window.location.href = `mailto:perchik.des@gmail.com?subject=${subject}&body=${body}`;
-      alert('Открыт почтовый клиент для отправки сообщения');
+      console.error('Error:', error);
+      
+      showMessage('Не удалось отправить сообщение. Пожалуйста, попробуйте позже или свяжитесь с нами через Telegram.', 'error');
+      
+      // Опционально: fallback to mailto через несколько секунд
+      setTimeout(() => {
+        const subject = encodeURIComponent('Новое сообщение с сайта ServiceLab');
+        const body = encodeURIComponent(
+          `Имя: ${form.name.value}\nEmail: ${form.email.value}\nТелефон: ${form.phone.value}\n\nСообщение:\n${form.message.value}`
+        );
+        window.location.href = `mailto:perchik.des@gmail.com?subject=${subject}&body=${body}`;
+      }, 3000);
     } finally {
       submitBtn.innerHTML = originalText;
       submitBtn.disabled = false;
